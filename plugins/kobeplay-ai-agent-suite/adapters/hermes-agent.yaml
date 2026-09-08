@@ -1,0 +1,11 @@
+name: kobeplay-portal-router
+instructions: ../AGENTS.md
+knowledge:
+  - ../skills/kobeplay-portal-router/SKILL.md
+  - ../skills/kobeplay-portal-router/references
+connectors:
+  - notion
+  - github
+  - composio
+  - pipedream
+human_approval: required
