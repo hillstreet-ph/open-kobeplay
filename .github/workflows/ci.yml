@@ -1,0 +1,27 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [development, staging, main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
+      - run: docker build -t open-payment:ci .
+      - run: docker run -d --name open-payment-ci -p 3000:3000 -e NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co -e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=ci-placeholder open-payment:ci
+      - run: for i in {1..20}; do curl -fsS http://127.0.0.1:3000/api/health && exit 0; sleep 2; done; docker logs open-payment-ci; exit 1
