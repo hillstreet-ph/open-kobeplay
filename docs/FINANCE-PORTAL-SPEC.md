@@ -1,110 +1,180 @@
-# KobePlay Finance Portal — Product and Architecture Specification
+# KobePlay Client Billing and Operator Finance Portal
 
 Status: Proposed  
 Date: 2026-09-10  
-Canonical operational project: [Notion project](https://app.notion.com/p/aa2256716a364a2eb22640f5651e0d4d)  
-Implementation plan: [Notion plan](https://app.notion.com/p/3d7c65833c8881f6a04af0b4b970a490)
+Canonical project: [Notion](https://app.notion.com/p/aa2256716a364a2eb22640f5651e0d4d)  
+Implementation plan: [Notion](https://app.notion.com/p/3d7c65833c8881f6a04af0b4b970a490)
 
-## Decision
+## Business model
 
-Build one Finance Portal inside Open KobePlay for:
+KobePlay is the operator and commercial middleman.
 
-- client funding and non-withdrawable service credit;
-- tools and subscription renewals;
-- staff roles, compensation obligations, and approved payroll runs;
-- invoices, receipts, reminders, reconciliation, reports, and audit events.
+1. The operator contracts and invoices the client.
+2. The client pays the operator or adds non-withdrawable service credit.
+3. The operator pays tools, infrastructure, and staff from its own accounts.
+4. Staff are paid on the operator's internal cutoff schedule.
+5. Client revenue, vendor cost, payroll, payment fees, tax reserve, and operator margin are reconciled privately.
 
-Notion remains the operational catalog and planning layer. Supabase is the transactional system of record. A licensed payment gateway owns hosted checkout, card tokenization, payment-method data, 3DS, and gateway webhooks.
+Clients never pay staff directly.
 
-Do not build a transferable or withdrawable wallet in v1.
+## Mandatory visibility boundary
 
-## Confirmed source baseline
+### Client Billing Portal
 
-- Tools & Subscriptions: 14 current records totaling USD 507 per month, including a USD 35 trial record. All statuses, costs, and renewal dates require finance verification before invoicing.
-- Staff & Salary: 8 active records. Seven entered weekly amounts total PHP 35,000 per week. IT Developer project and maintenance amounts are not yet approved.
-- No placeholder or unverified amount may enter an invoice or payment run.
+Clients can see:
+
+- approved service packages and assigned role/service coverage;
+- managed tools or subscriptions charged to the client;
+- invoice line items, tax, discounts, credits, receipts, due dates, and payment history;
+- available service credit;
+- Add Credit and Pay by Card;
+- their own organization users and billing settings.
+
+Clients must not see:
+
+- individual staff salaries or payroll dates;
+- internal tool/vendor costs;
+- markup, commission, operator cut, profit, or gross margin;
+- staff bank or e-wallet accounts;
+- other clients or internal approval records.
+
+### Operator Finance Portal
+
+The operator can see and manage:
+
+- client contracts, bill rates, invoices, collections, and receivables;
+- true vendor costs and client tool charges;
+- staff compensation, payroll accruals, cutoff periods, and payouts;
+- platform/agency fees, markup, discounts, payment fees, tax reserve, and margin;
+- approvals, refunds, adjustments, reconciliation, and audit events.
+
+## Calculation model
+
+Client invoice:
+
+```text
+managed_tools
++ service_packages
++ platform_or_agency_fee
++ approved_reimbursable_expenses
++ tax
+- discount
+- available_service_credit
+= client_amount_due
+```
+
+Operator result:
+
+```text
+client_revenue
+- payment_gateway_fees
+- tool_and_infrastructure_cost
+- staff_payroll_accrual
+- approved_operating_expenses
+- tax_reserve
+= operator_contribution_margin
+```
+
+Never generate a client invoice by exposing the staff salary table. Convert internal costs into approved client service-package prices.
+
+## Platform decision
+
+### Payment layer: Stripe
+
+Use Stripe first if the operator's Stripe account is active for the legal entity and intended business model:
+
+- Stripe Checkout for card collection;
+- Stripe Billing and Invoicing for one-time or recurring charges;
+- signed webhooks for payment confirmation;
+- Customer Balance Transactions for auditable invoice credits;
+- Stripe Customer Portal only for safe billing functions.
+
+Keep a provider adapter so another approved gateway can be added later.
+
+### Transactional backend: Supabase
+
+Use Supabase as the single production transactional backend:
+
+- Postgres finance ledger;
+- Auth and organization membership;
+- RLS tenant isolation;
+- Storage for generated invoice/receipt PDFs;
+- Edge Functions for Stripe webhooks and secure server operations.
+
+InsForge overlaps with Supabase because it also provides Postgres, authentication, storage, realtime, and functions. Do not operate two primary databases. Use InsForge only for prototyping, agent-assisted development, or a deliberate future migration.
+
+### Remaining infrastructure
+
+| Platform | Responsibility |
+|---|---|
+| GitHub | Source, migrations, CI/CD, review history |
+| Cloudflare | DNS, WAF, CDN, rate limiting, optional frontend |
+| Zeabur | Long-running API, scheduler, workers, PDF generation |
+| Supabase | Transactional database, Auth, RLS, Storage, Edge Functions |
+| Stripe | Checkout, cards, invoices, payment events |
+| Notion | Approved catalogs, projects/tasks, safe summaries |
+| Sentry | Application errors, traces, release monitoring |
+| Secret manager | Stripe, Supabase, Notion, and deployment secrets |
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    N["Notion catalogs"] --> S["Sync and validation worker"]
-    S --> D["Supabase finance ledger"]
-    U["Client Finance Portal"] --> D
-    U --> G["Hosted payment gateway"]
-    G --> W["Signed webhook worker"]
+    C["Client Billing Portal"] --> A["KobePlay API"]
+    O["Operator Finance Portal"] --> A
+    A --> D["Supabase finance ledger"]
+    C --> S["Stripe Checkout and Billing"]
+    S --> W["Signed webhook"]
     W --> D
-    D --> R["Invoices, reminders, reconciliation"]
-    R --> N
+    N["Notion approved catalogs"] --> Y["Sync worker"]
+    Y --> D
+    D --> P["Private payroll cutoff"]
 ```
 
-### Application
+Client and operator views use separate authorization policies even though they share the same accounting engine.
 
-- Next.js + TypeScript + Tailwind/shadcn
-- Supabase Postgres, Auth, Storage, RLS, and Edge Functions
-- Background/scheduled workers for reminders, synchronization, PDF generation, and reconciliation
-- Payment-provider adapter; PayMongo is the initial Philippine candidate, subject to merchant approval and capability verification
-
-### Core tables
+## Core data model
 
 - `organizations`, `memberships`, `roles`
-- `vendors`, `staff_profiles`, `compensation_terms`
-- `subscriptions`, `subscription_cost_versions`, `renewal_events`
+- `client_contracts`, `service_packages`, `client_price_versions`
+- `vendors`, `tools`, `vendor_cost_versions`, `client_tool_charges`
+- `staff_profiles`, `compensation_terms`, `payroll_cutoffs`, `payroll_items`
 - `invoices`, `invoice_items`, `credit_notes`, `receipts`
-- `payment_intents`, `payments`, `refunds`, `webhook_events`
+- `stripe_customers`, `payment_intents`, `payments`, `refunds`, `webhook_events`
 - `credit_accounts`, `ledger_entries`
-- `payroll_runs`, `payroll_items`, `approvals`
-- `reminder_rules`, `notification_deliveries`
-- `budgets`, `cost_centers`, `audit_events`, `evidence_links`
+- `expenses`, `tax_reserves`, `margin_snapshots`
+- `approvals`, `reminder_rules`, `notification_deliveries`, `audit_events`
 
-## Controls
+## Security rules
 
 - Store money as integer minor units plus ISO currency.
-- Preserve original and reporting currency, exchange-rate source, and timestamp.
-- Use immutable posted ledger entries; corrections use reversals or adjustments.
-- Enforce idempotency on invoices, webhooks, credits, refunds, and payroll runs.
-- Require maker-checker approval for payroll, refunds, manual credits, and high-value payments.
-- Enforce organization-scoped RLS on every tenant-owned table.
-- Verify webhook signatures before state changes.
-- Keep card data, CVV, gateway secrets, KYC, OTPs, and private payment evidence out of Notion, GitHub, client logs, and general application tables.
-- Daily reconciliation reports mismatches and never silently rewrites finance records.
+- Use immutable posted ledger entries and reversing transactions.
+- Enforce webhook signatures and idempotency keys.
+- Keep operator-only fields out of client queries, serializers, exports, and logs.
+- Apply Supabase RLS and server-side authorization; UI hiding alone is insufficient.
+- Never store card numbers or CVV.
+- Require approval for payroll runs, refunds, manual credits, price changes, and high-value payments.
+- Reconcile Stripe, invoices, credit ledger, vendor costs, and payroll daily.
+- Log actor, organization, action, previous state, new state, reason, and correlation ID.
 
-## MVP screens
+## MVP release order
 
-1. Finance Overview
-2. Tools & Subscriptions
-3. Staff & Positions
-4. Invoices & Receipts
-5. Add Credit / Pay Invoice
-6. Payment Runs
-7. Reports & Cost Audit
-8. Approvals
-9. Audit Log
-10. Billing Settings
-
-## Delivery
-
-### Phase 0 — approve inputs
-
-Confirm legal billing entity, BIR/tax treatment, invoice numbering, currencies, merchant gateway, service-credit treatment, approvers, thresholds, reminders, and payout rails. Verify every catalog amount.
-
-### Phase 1 — usable finance dashboard
-
-Implement auth/RLS, catalog sync, invoice generation, PDFs, manual payment evidence, reminders, dashboard reporting, and audit logging.
-
-### Phase 2 — online payments
-
-Implement hosted checkout, signed/idempotent webhooks, service-credit ledger, receipts, refunds, and reconciliation.
-
-### Phase 3 — controlled payroll and integrations
-
-Implement payroll runs, maker-checker approvals, payout export/adapter, notifications, Notion safe-summary sync, and accounting export.
+1. Operator configuration and verified pricing
+2. Client and operator authentication/roles
+3. Separate dashboards and RLS policies
+4. Invoice generation and PDF receipts
+5. Stripe Checkout and signed webhooks
+6. Service-credit ledger
+7. Recurring invoices and reminders
+8. Private payroll cutoff and payout register
+9. Reconciliation, margin reports, and audit log
+10. Staging E2E, backup/restore test, and production approval
 
 ## Release gates
 
-- No duplicated webhook creates duplicate credit or payment.
-- Invoice numbers and posted line items are immutable.
-- Unverified costs are excluded.
-- Salary data is restricted to finance-authorized roles.
-- Reconciliation catches gateway/ledger/invoice mismatches.
-- Security review, backup/restore test, staging E2E, and human production approval pass.
+- A client API response contains no salary, vendor cost, or margin field.
+- Duplicate webhooks never duplicate credit or payments.
+- Client invoice prices come from approved price versions.
+- Payroll remains a separate operator-private obligation.
+- All posted finance events are traceable and reversible.
+- No production payment activates before legal, tax, Stripe, and invoice rules are approved.
