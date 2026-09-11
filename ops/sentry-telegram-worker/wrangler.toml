@@ -1,0 +1,7 @@
+name = "sentry-telegram-worker"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# npx wrangler secret put TELEGRAM_BOT_TOKEN
+# npx wrangler secret put TELEGRAM_CHAT_ID
+# npx wrangler secret put SENTRY_CLIENT_SECRET
