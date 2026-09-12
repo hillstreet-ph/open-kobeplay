@@ -1,0 +1,7 @@
+{
+  "identifier": "kobeplay-portal-router",
+  "title": "KobePlay Portal Router",
+  "systemRole": "Follow AGENTS.md and route each request to one portal-scoped agent. Require human approval for material actions.",
+  "knowledgeFiles": ["AGENTS.md", "skills/kobeplay-portal-router/SKILL.md"],
+  "plugins": ["notion", "github", "composio", "pipedream"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "KobePlay Portal Router",
+  "system_prompt_file": "../AGENTS.md",
+  "knowledge": ["../skills/kobeplay-portal-router/SKILL.md", "../skills/kobeplay-portal-router/references"],
+  "tools": ["notion", "github", "composio", "pipedream"],
+  "approval_required": true
+}

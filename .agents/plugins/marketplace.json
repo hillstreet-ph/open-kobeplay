@@ -1,0 +1,10 @@
+{
+  "name": "kobeplay",
+  "interface": {"displayName": "KobePlay"},
+  "plugins": [{
+    "name": "kobeplay-ai-agent-suite",
+    "source": {"source": "local", "path": "./plugins/kobeplay-ai-agent-suite"},
+    "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+    "category": "Productivity"
+  }]
+}

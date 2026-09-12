@@ -1,0 +1,18 @@
+{
+  "name": "kobeplay-ai-agent-suite",
+  "version": "1.0.0",
+  "description": "One governed skill suite for KobePlay's five portal AI agents.",
+  "author": {
+    "name": "KobePlay"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "KobePlay AI Agent Suite",
+    "shortDescription": "Governed skills for five portal agents.",
+    "longDescription": "Routes work across Private Operations, Client, Provider & IT, SMA & CSR, and Influencer portals while preserving access boundaries, approvals, and audit history.",
+    "developerName": "KobePlay",
+    "category": "Productivity",
+    "capabilities": ["portal-routing", "notion-operations", "connector-governance"],
+    "defaultPrompt": "Route this KobePlay task to the correct portal agent and apply the required governance controls."
+  }
+}
