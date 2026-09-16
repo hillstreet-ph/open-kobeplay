@@ -22,6 +22,6 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
-      - run: docker build -t open-payment:ci .
-      - run: docker run -d --name open-payment-ci -p 3000:3000 -e NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co -e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=ci-placeholder open-payment:ci
-      - run: for i in {1..20}; do curl -fsS http://127.0.0.1:3000/api/health && exit 0; sleep 2; done; docker logs open-payment-ci; exit 1
+      - run: docker build -t open-kobeplay:ci .
+      - run: docker run -d --name open-kobeplay-ci -p 3000:3000 -e NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co -e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=ci-placeholder open-kobeplay:ci
+      - run: for i in {1..20}; do curl -fsS http://127.0.0.1:3000/api/health && exit 0; sleep 2; done; docker logs open-kobeplay-ci; exit 1
