@@ -19,7 +19,10 @@
 
 ## Integration contract
 
-A future Pipedream or Composio workflow may trigger on approved Notion changes and open a GitHub pull request. It must:
+The GitHub workflow `.github/workflows/notion-sync.yml` runs every 15 minutes and may
+also be dispatched manually. It reads only metadata for the immutable IDs in
+`docs/NOTION-SOURCE-MAP.md`, writes `generated/notion/manifest.json`, and opens a
+review pull request when the metadata changes. It must:
 
 - use least-privilege Notion read access and GitHub contents/PR access;
 - redact credentials, tokens, raw conversations, KYC, and payment data;
@@ -30,6 +33,10 @@ A future Pipedream or Composio workflow may trigger on approved Notion changes a
 - never delete by default;
 - stop on ambiguous duplicates or broken relations;
 - attach a machine-readable sync report.
+
+This is near-real-time polling, not an event webhook. A future Pipedream or Composio
+Notion webhook may dispatch the workflow for lower latency, but it must preserve the
+same redaction, idempotency, portal-boundary, and pull-request gates.
 
 ## Required secret names
 
