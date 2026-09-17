@@ -1,6 +1,6 @@
 # Open Portfolio E2E Readiness (Canonical)
 
-**Last updated:** 2026-09-14  
+**Last updated:** 2026-09-17  
 **Org tracker:** [#6](https://github.com/hillstreet-ph/open-kobeplay/issues/6)  
 **Coordination:** Notion Private Operations · AITeam · open_e2e_deploy_worker
 
@@ -23,7 +23,7 @@ This document is the single source of truth for purpose, stack, done vs missing,
 | **Open-Teleset** | Telemetry / set operations plane |
 | **Open-Payment** | Payments plane (compliance-sensitive) |
 
-**Deployment stack (locked):** GitHub · Docker Hub · Cloudflare · Supabase · Sentry · Zeabur (preferred) / Railway fallback · Pipedream · Composio · slim.tools  
+**Deployment stack (locked):** GitHub · Docker Hub · Cloudflare · Supabase · Sentry · Zeabur · Pipedream · Composio · slim.tools  
 **Credentials:** Open-Secret + Google Drive/Sheets inventory for `kairocasino8@gmail.com` — never paste secrets into Notion/GitHub issues.
 
 ---
@@ -102,7 +102,7 @@ Legacy / historical: `open-box` (replaced by Open-Model), `open-template`, `open
 3. Sentry Internal Integration webhook URL → deployed Worker **or** Telegram Alerts Bot install.
 4. Create/duplicate alert Templates A (new high errors) + B (regression) with action → integration.
 5. Merge SDK/ops PRs; rotate token if required.
-6. Approve Open-Model runtime provider decision (sanctioned stack is Zeabur/Railway) before any production deployment.
+6. Approve the verified Open-Model Zeabur project/service mapping and immutable image digest before any production deployment.
 
 ---
 
