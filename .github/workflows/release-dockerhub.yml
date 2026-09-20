@@ -62,4 +62,4 @@ jobs:
           sbom: true
 
       - name: Record digest
-        run: echo "digest=${{ steps.build.outputs.digest }}" >> "${{ github.step_summary }}"
+        run: echo "digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
