@@ -36,15 +36,19 @@ export function normalizeParent(parent = {}) {
 }
 
 function retryDelayMs(response) {
-  const retryAfter = Number(response.headers.get("retry-after"));
+  const header = response.headers.get("retry-after");
+  const retryAfter = header?.trim() ? Number(header) : NaN;
   return Number.isFinite(retryAfter) && retryAfter >= 0
     ? Math.min(retryAfter * 1000, 60_000)
     : 1000;
 }
 
-export async function fetchWithRetry(url, options, fetchImpl = fetch, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))) {
+export async function fetchWithRetry(url, options, fetchImpl = fetch, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), timeoutMs = 15_000) {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const response = await fetchImpl(url, options);
+    const response = await fetchImpl(url, {
+      ...options,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     if (response.status !== 429 || attempt === MAX_ATTEMPTS) return response;
     await sleep(retryDelayMs(response));
   }

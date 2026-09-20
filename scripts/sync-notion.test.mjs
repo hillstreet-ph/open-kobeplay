@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createServer } from "node:http";
 
 import { buildSnapshot, fetchWithRetry, normalizeParent, parseSourceMap } from "./sync-notion.mjs";
 
@@ -66,4 +67,37 @@ test("builds a metadata-only snapshot with parent evidence", async () => {
   assert.equal(calls.filter((url) => url.includes("/databases/")).length, 1);
   assert.deepEqual(snapshot.resources[0].parent, { type: "page_id", id: "cccccccc" });
   assert.ok(snapshot.content_hash.match(/^[0-9a-f]{64}$/));
+});
+
+
+test("uses bounded fallback delays and stops after three throttled attempts", async () => {
+  for (const header of [null, "", "garbage", "-1", "99999"]) {
+    let calls = 0;
+    const delays = [];
+    const response = await fetchWithRetry(
+      "https://example.invalid", {},
+      async () => {
+        calls += 1;
+        return { status: 429, headers: new Headers(header === null ? {} : { "retry-after": header }) };
+      },
+      async (ms) => delays.push(ms),
+    );
+    assert.equal(response.status, 429);
+    assert.equal(calls, 3);
+    assert.deepEqual(delays, header === "99999" ? [60_000, 60_000] : [1000, 1000]);
+  }
+});
+
+test("aborts a server that never returns response headers", async () => {
+  const server = createServer(() => {});
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    await assert.rejects(
+      fetchWithRetry(`http://127.0.0.1:${server.address().port}`, {}, fetch, undefined, 50),
+      { name: "TimeoutError" },
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
