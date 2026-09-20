@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/hillstreet-ph/open-kobeplay/compare/v1.0.0...v1.0.1) (2026-09-20)
+
+
+### Bug Fixes
+
+* add governed Notion sync and correct CI identity ([#20](https://github.com/hillstreet-ph/open-kobeplay/issues/20)) ([7245a4f](https://github.com/hillstreet-ph/open-kobeplay/commit/7245a4f187e5b7b1a42dfb8d4f06d09e0ac23344))
+
 ## 1.0.0 (2026-09-12)
 
 
