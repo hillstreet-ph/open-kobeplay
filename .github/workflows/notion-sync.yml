@@ -22,6 +22,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Validate metadata sync contract
+        run: node --test scripts/sync-notion.test.mjs
       - name: Generate redacted metadata snapshot
         env:
           NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
@@ -29,15 +31,19 @@ jobs:
       - name: Detect material changes
         id: changes
         run: |
-          git diff --ignore-matching-lines='"generated_at"' --quiet -- generated/notion/manifest.json \
-            && echo "changed=false" >> "$GITHUB_OUTPUT" \
-            || echo "changed=true" >> "$GITHUB_OUTPUT"
+          if ! git ls-files --error-unmatch generated/notion/manifest.json >/dev/null 2>&1; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --ignore-matching-lines='"generated_at"' --quiet -- generated/notion/manifest.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Create review pull request
         if: steps.changes.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ github.token }}
-          branch: automation/notion-metadata-sync
+          token: ${{ secrets.SYNC_GITHUB_TOKEN }}
+          branch: agent/5-notion-metadata-sync
           delete-branch: true
           commit-message: "chore: sync Notion metadata"
           title: "chore: sync Notion metadata"
@@ -45,4 +51,8 @@ jobs:
             Automated metadata-only snapshot from canonical Notion IDs.
 
             No page bodies, credentials, payment data, private conversations, or secrets are exported.
+            Refs #5.
+
+            Test evidence: `node --test scripts/sync-notion.test.mjs` passed in
+            [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
           labels: automation,notion-sync

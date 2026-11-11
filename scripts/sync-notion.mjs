@@ -1,17 +1,24 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 
-const token = process.env.NOTION_API_TOKEN;
-if (!token) throw new Error("NOTION_API_TOKEN is required");
+const NOTION_VERSION = "2022-06-28";
+const MAX_ATTEMPTS = 3;
 
-const sourceMap = await readFile("docs/NOTION-SOURCE-MAP.md", "utf8");
-const ids = [...sourceMap.matchAll(/`([0-9a-f]{32})`/gi)].map((match) => match[1]);
-if (!ids.length) throw new Error("No immutable Notion IDs found in docs/NOTION-SOURCE-MAP.md");
-
-const headers = {
-  Authorization: `Bearer ${token}`,
-  "Notion-Version": "2022-06-28",
-};
+export function parseSourceMap(sourceMap) {
+  const resources = [];
+  for (const line of sourceMap.split("\n")) {
+    const match = line.match(/^\|\s*([^|]+?)\s*\|\s*`([0-9a-f]{32})`\s*\|\s*(Page|Database)\s*\|/i);
+    if (!match) continue;
+    resources.push({
+      canonical_name: match[1].trim(),
+      id: match[2].toLowerCase(),
+      type: match[3].toLowerCase(),
+    });
+  }
+  return [...new Map(resources.map((resource) => [resource.id, resource])).values()]
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
 
 function safeTitle(object) {
   if (object.object === "page") {
@@ -21,41 +28,99 @@ function safeTitle(object) {
   return object.title?.map((part) => part.plain_text).join("") || "Untitled database";
 }
 
-async function fetchObject(id) {
-  for (const endpoint of [`pages/${id}`, `databases/${id}`]) {
-    const response = await fetch(`https://api.notion.com/v1/${endpoint}`, { headers });
-    if (response.ok) {
-      const object = await response.json();
-      return {
-        id: object.id.replaceAll("-", ""),
-        object: object.object,
-        title: safeTitle(object),
-        url: object.url,
-        archived: Boolean(object.archived),
-        last_edited_time: object.last_edited_time,
-      };
-    }
-    if (response.status !== 404) {
-      throw new Error(`Notion ${endpoint} returned ${response.status}`);
-    }
-  }
-  throw new Error(`Notion object ${id} is not accessible`);
+export function normalizeParent(parent = {}) {
+  const type = parent.type ?? "unknown";
+  if (type === "workspace") return { type, workspace: Boolean(parent.workspace) };
+  const id = parent[type];
+  return id ? { type, id: id.replaceAll("-", "") } : { type };
 }
 
-const resources = [];
-for (const id of [...new Set(ids)].sort()) resources.push(await fetchObject(id));
+function retryDelayMs(response) {
+  const header = response.headers.get("retry-after");
+  const retryAfter = header?.trim() ? Number(header) : NaN;
+  return Number.isFinite(retryAfter) && retryAfter >= 0
+    ? Math.min(retryAfter * 1000, 60_000)
+    : 1000;
+}
 
-const snapshot = {
-  schema_version: 1,
-  generated_at: new Date().toISOString(),
-  source: "Notion metadata API",
-  content_exported: false,
-  resource_count: resources.length,
-  resources,
-};
-const canonical = JSON.stringify({ ...snapshot, generated_at: null });
-snapshot.content_hash = createHash("sha256").update(canonical).digest("hex");
+export async function fetchWithRetry(url, options, fetchImpl = fetch, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), timeoutMs = 15_000) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    const response = await fetchImpl(url, {
+      ...options,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (response.status !== 429 || attempt === MAX_ATTEMPTS) return response;
+    await sleep(retryDelayMs(response));
+  }
+  throw new Error("Unreachable retry state");
+}
 
-await mkdir("generated/notion", { recursive: true });
-await writeFile("generated/notion/manifest.json", `${JSON.stringify(snapshot, null, 2)}\n`);
-console.log(`Wrote ${resources.length} redacted Notion metadata records`);
+export async function fetchResource(resource, token, fetchImpl = fetch, sleep) {
+  const endpoint = resource.type === "database" ? "databases" : "pages";
+  const response = await fetchWithRetry(
+    `https://api.notion.com/v1/${endpoint}/${resource.id}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Notion-Version": NOTION_VERSION,
+      },
+    },
+    fetchImpl,
+    sleep,
+  );
+
+  if (!response.ok) {
+    throw new Error(`Notion ${endpoint}/${resource.id} returned ${response.status}`);
+  }
+
+  const object = await response.json();
+  return {
+    canonical_name: resource.canonical_name,
+    id: object.id.replaceAll("-", ""),
+    object: object.object,
+    title: safeTitle(object),
+    url: object.url,
+    parent: normalizeParent(object.parent),
+    archived: Boolean(object.archived),
+    last_edited_time: object.last_edited_time,
+  };
+}
+
+export async function buildSnapshot({ sourceMap, token, fetchImpl = fetch, sleep }) {
+  const sourceResources = parseSourceMap(sourceMap);
+  if (!sourceResources.length) {
+    throw new Error("No typed immutable Notion resources found in docs/NOTION-SOURCE-MAP.md");
+  }
+
+  const resources = [];
+  for (const resource of sourceResources) {
+    resources.push(await fetchResource(resource, token, fetchImpl, sleep));
+  }
+
+  const snapshot = {
+    schema_version: 2,
+    generated_at: new Date().toISOString(),
+    source: "Notion metadata API",
+    content_exported: false,
+    resource_count: resources.length,
+    resources,
+  };
+  const canonical = JSON.stringify({ ...snapshot, generated_at: null });
+  snapshot.content_hash = createHash("sha256").update(canonical).digest("hex");
+  return snapshot;
+}
+
+export async function main() {
+  const token = process.env.NOTION_API_TOKEN;
+  if (!token) throw new Error("NOTION_API_TOKEN is required");
+
+  const sourceMap = await readFile("docs/NOTION-SOURCE-MAP.md", "utf8");
+  const snapshot = await buildSnapshot({ sourceMap, token });
+  await mkdir("generated/notion", { recursive: true });
+  await writeFile("generated/notion/manifest.json", `${JSON.stringify(snapshot, null, 2)}\n`);
+  console.log(`Wrote ${snapshot.resource_count} redacted Notion metadata records`);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}
